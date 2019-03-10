@@ -26,12 +26,17 @@ import static org.apache.jena.tdb.base.record.Record.keyNE ;
 import static org.apache.jena.tdb.index.bplustree.BPlusTreeParams.CheckingNode ;
 import static org.apache.jena.tdb.index.bplustree.BPlusTreeParams.CheckingTree ;
 import static org.apache.jena.tdb.index.bplustree.BPlusTreeParams.DumpTree ;
+
+import java.util.Stack;
+
 import org.apache.jena.atlas.io.IndentedLineBuffer ;
 import org.apache.jena.atlas.io.IndentedWriter ;
 import org.apache.jena.tdb.base.block.Block ;
 import org.apache.jena.tdb.base.buffer.PtrBuffer ;
 import org.apache.jena.tdb.base.buffer.RecordBuffer ;
 import org.apache.jena.tdb.base.record.Record ;
+import org.apache.jena.tdb.base.record.RecordFactory;
+import org.apache.jena.tdb.store.NodeId;
 import org.apache.jena.tdb.sys.SystemTDB ;
 import org.slf4j.Logger ;
 import org.slf4j.LoggerFactory ;
@@ -1538,5 +1543,36 @@ public final class BPTreeNode extends BPTreePage
         bpTree.getRecordsMgr().dump() ;
         System.out.println("---") ;
         System.out.flush();
+    }
+
+    public Record getLowOrZeroRecord()
+    {
+        if (records.getSize() > 0)
+            return records.getLow() ;
+        else
+            return Record.zeroTripleRecord ;
+    }
+
+    public Record getHighOrZeroRecord()
+    {
+        if (records.getSize() > 0)
+            return records.getHigh() ;
+        else
+            return Record.zeroTripleRecord ;
+    }
+
+    public BPTreeRecords search(Stack<BPTreeNode> nodes, Record rec)
+    {
+        nodes.push(this) ;
+
+        BPTreePage p = findHere(rec) ;
+        if (p instanceof BPTreeNode)
+        {
+            BPTreeNode n = (BPTreeNode) p ;
+            nodes.push(n);
+            return n.search(nodes, rec) ;
+        }
+        else
+            return (BPTreeRecords) p ;
     }
 }
