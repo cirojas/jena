@@ -367,14 +367,14 @@ public final class BPTreeNode extends BPTreePage
     /** Do not use without great care */
     RecordBuffer getRecordBuffer()   { return records ; }
     /** Do not use without great care */
-    PtrBuffer getPtrBuffer()         { return ptrs ; }
+    public PtrBuffer getPtrBuffer()  { return ptrs ; }
     
     void setIsLeaf(boolean isLeaf)   { this.isLeaf = isLeaf ; }
 
     boolean isLeaf()                 { return this.isLeaf ; }
     
     @Override
-    public final int getId()                { return id ; }
+    public final int getId()         { return id ; }
 
     @Override
     final void write()          { bpTree.getNodeManager().write(this) ; } 
@@ -383,7 +383,7 @@ public final class BPTreeNode extends BPTreePage
     final void promote()        { bpTree.getNodeManager().promote(this) ; }
 
     @Override
-    final void release()        { bpTree.getNodeManager().release(this) ; } 
+    public final void release() { bpTree.getNodeManager().release(this) ; }
 
     @Override
     final void free()           { bpTree.getNodeManager().free(this) ; } 
@@ -469,7 +469,7 @@ public final class BPTreeNode extends BPTreePage
         return r ;
     }
 
-    private static int convert(int idx)
+    public static int convert(int idx)
     {
         if ( idx >= 0 ) return idx ;
         return decodeIndex(idx) ;
@@ -1139,7 +1139,7 @@ public final class BPTreeNode extends BPTreePage
         catch (ClassCastException ex) { error("Wrong type: "+other) ; return null ; }
     }
 
-    final int findSlot(Record rec)
+    public final int findSlot(Record rec)
     {
         int x = records.find(rec) ;
         return x ;
