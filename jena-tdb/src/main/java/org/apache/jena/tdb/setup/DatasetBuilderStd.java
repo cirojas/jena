@@ -39,6 +39,7 @@ import org.apache.jena.tdb.base.record.RecordFactory ;
 import org.apache.jena.tdb.index.* ;
 import org.apache.jena.tdb.index.bplustree.BPlusTree ;
 import org.apache.jena.tdb.index.bplustree.BPlusTreeParams ;
+import org.apache.jena.tdb.leapfrog.OpExecutorOptionalTree;
 import org.apache.jena.tdb.lib.ColumnMap ;
 import org.apache.jena.tdb.solver.OpExecutorTDB1 ;
 import org.apache.jena.tdb.store.* ;
@@ -227,7 +228,8 @@ public class DatasetBuilderStd {
         DatasetGraphTDB dsg = new DatasetGraphTDB(tripleTable, quadTable, prefixes, transform, storageConfig) ;
         // TDB does filter placement on BGPs itself.
         dsg.getContext().set(ARQ.optFilterPlacementBGP, false) ;
-        QC.setFactory(dsg.getContext(), OpExecutorTDB1.OpExecFactoryTDB) ;
+        //QC.setFactory(dsg.getContext(), OpExecutorTDB1.OpExecFactoryTDB) ;
+        QC.setFactory(dsg.getContext(), OpExecutorOptionalTree.OpExecFactoryOptionalTree) ;
         return dsg ;
     }
     
