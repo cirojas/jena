@@ -135,14 +135,11 @@ public class BGPIter {
         }
     }
 
-    public boolean reset() {
+    public void reset() {
         while (level >= 0) {
             up();
         }
-        if (!openTerms())
-            return false;
         open();
-        return true;
     }
 
     public boolean hasNext() {
@@ -200,7 +197,6 @@ public class BGPIter {
      * @return true if it matches successfully or false if couldn't
      */
     private boolean findIntersection() {
-
         LFTrieIndex currentIter[] = itersForVar[level];
         int p = idxMin[level]; // only to make code cleaner
 

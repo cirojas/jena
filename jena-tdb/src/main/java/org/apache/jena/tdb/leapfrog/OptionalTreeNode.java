@@ -43,7 +43,7 @@ public class OptionalTreeNode implements LFIterBindingNodeId {
     private final static int STAGE_FIND = 0;        // This stage tries to find a binding from myPattern
     private final static int STAGE_EXTEND = 1;      // This stage tries to extend myBinding with children bindings
 
-    private final static int CHILDREN_CACHE_SIZE = 500;
+    private final static int CHILDREN_CACHE_SIZE = 1000;
 
     private int[] cacheSize;
     private int[] cacheCurrentPos;
@@ -160,7 +160,8 @@ public class OptionalTreeNode implements LFIterBindingNodeId {
 
     private void reset() {
         stage = STAGE_FIND;
-        atEnd = !myPattern.reset(); //TODO pensar mejor
+        myPattern.reset();
+        atEnd = atEndForever;
     }
 
     @Override
@@ -170,105 +171,100 @@ public class OptionalTreeNode implements LFIterBindingNodeId {
         } else if (nextFound) {
             return true;
         }
-
-        if (stage == STAGE_FIND) {
-            return executeFindStage();
-        } else {
-            if (executeExtendStage()) {
-                if (!checkFilters(postFilters)) {
-                    return hasNext();
-                }
-                return true;
-            } else {
-                return false;
-            }
-        }
-    }
-
-    private boolean executeFindStage() {
-        if (myPattern.hasNext()) {
-            BindingNodeId myOldBinding = myBinding;
-            long[] myPatternIds = myPattern.next();
-            myBinding = new BindingNodeId();
-
-            for (int i = 0; i < myPatternIds.length; i++) {
-                myBinding.put(myPattern.getLocalAttribute(i), NodeId.create(myPatternIds[i]));
-            }
-
-            extendedBinding = new BindingNodeId(myBinding);
-            if (!checkFilters(preFilters)) {
-                return hasNext();
-            }
-
-            if (children.length > 0) {
-                int firstChangedVarPos = myPattern.getFirstChangedVar(myOldBinding);
-
-                for (int i = 0; i < children.length; i++) {
-                    if (children[i].seekBinding(myBinding, firstChangedVarPos)
-                            && children[i].hasNext()) {
-                        stage = STAGE_EXTEND;
-                        fillChildCache(i);
-                        extendBinding(i);
-                    } else {
-                        cacheSize[i] = 0;
+        mainLoop:
+        while (true) {
+            if (stage == STAGE_FIND) {
+                if (myPattern.hasNext()) {
+                    BindingNodeId myOldBinding = myBinding;
+                    long[] myPatternIds = myPattern.next();
+                    myBinding = new BindingNodeId();
+                    for (int i = 0; i < myPatternIds.length; i++) {
+                        myBinding.put(myPattern.getLocalAttribute(i), NodeId.create(myPatternIds[i]));
                     }
+                    extendedBinding = new BindingNodeId(myBinding);
+                    if (!checkFilters(preFilters)) {
+                        continue mainLoop;
+                    }
+                    if (children.length > 0) {
+                        int firstChangedVarPos = myPattern.getFirstChangedVar(myOldBinding);
+                        for (int i = 0; i < children.length; i++) {
+                            if (children[i].seekBinding(myBinding, firstChangedVarPos) && children[i].hasNext()) {
+                                stage = STAGE_EXTEND;
+                                fillChildCache(i);
+                                extendBinding(i);
+                            } else {
+                                cacheSize[i] = 0;
+                            }
+                        }
+                    }
+                    if (!checkFilters(postFilters)) {
+                        continue mainLoop;
+                    }
+                    nextFound = true;
+                    return true;
+                } else {
+                    atEnd = true;
+                    return false;
+                }
+            } else {
+                boolean extendStageResult = false;
+                extendStageLoop:
+                while (true) {
+                    for (int i = 0; i < children.length; i++) {
+                        if (cacheCurrentPos[i] + 1 < cacheSize[i]) {
+                            cacheCurrentPos[i]++;
+                            extendBinding(i);
+                            while (--i >= 0) {
+                                resetChildCache(i);
+                            }
+                            nextFound = true;
+                            extendStageResult = true;
+                            break extendStageLoop;
+                        }
+                        if (children[i].hasNext()) {
+                            fillChildCache(i);
+                            extendBinding(i);
+                            while (--i >= 0) {
+                                resetChildCache(i);
+                            }
+                            nextFound = true;
+                            extendStageResult = true;
+                            break extendStageLoop;
+                        }
+                    }
+                    stage = STAGE_FIND;
+                    for (int i = 0; i < children.length; i++) {
+                        children[i].atEnd = children[i].atEndForever; //BUG
+                    }
+                    continue mainLoop;
+                }
+                if (extendStageResult) {
+                    if (!checkFilters(postFilters)) {
+                        continue mainLoop;
+                    }
+                    nextFound = true;
+                    return true;
+                } else {
+                    atEnd = true;
+                    return false;
                 }
             }
-
-            if (!checkFilters(postFilters)) {
-                return hasNext();
-            }
-
-            nextFound = true;
-            return true;
-        } else {
-            atEnd = true;
-            return false;
         }
-    }
-
-    private boolean executeExtendStage() {
-        for (int i = 0; i < children.length; i++) {
-            if (cacheCurrentPos[i] + 1 < cacheSize[i]) { // if puedo avanzar 1 dentro del cache
-                cacheCurrentPos[i]++;
-                BindingNodeId binding = childrenCachedBindings[i][cacheCurrentPos[i]];
-                extendMyBinding(binding.iterator(), binding);
-                nextFound = true;
-                return true;
-            }
-        }
-        for (int i = 0; i < children.length; i++) {
-            if (cacheSize[i] == CHILDREN_CACHE_SIZE && children[i].hasNext()) {
-                fillChildCache(i);
-                extendBinding(i);
-
-                while (--i >= 0) {
-                    resetChildCache(i);
-                }
-                nextFound = true;
-                return true;
-            }
-        }
-
-        stage = STAGE_FIND;
-        for (int i = 0; i < children.length; i++) {
-            children[i].atEnd = atEndForever; //TODO volver a estado de viabilidad
-        }
-        return executeFindStage();
     }
 
     private void extendBinding(int childPos) {
-        BindingNodeId binding = childrenCachedBindings[childPos][cacheCurrentPos[childPos]];
-        Iterator<Var> bindingVars = binding.iterator();
-        while (bindingVars.hasNext()) {
-            Var v = bindingVars.next();
-            if (!myBinding.containsKey(v)) {
-                extendedBinding.put(v, binding.get(v));
+        if (this.cacheSize[childPos] > 0) {
+            BindingNodeId binding = childrenCachedBindings[childPos][cacheCurrentPos[childPos]];
+            Iterator<Var> bindingVars = binding.iterator();
+            while (bindingVars.hasNext()) {
+                Var v = bindingVars.next();
+                if (!myBinding.containsKey(v)) {
+                    extendedBinding.put(v, binding.get(v));
+                }
             }
         }
     }
 
-    /* Before calling this method you have to check children[childPos] has a next binding */
     private void fillChildCache(int childPos) {
         cacheCurrentPos[childPos] = 0;
         int size = 0;
@@ -280,23 +276,9 @@ public class OptionalTreeNode implements LFIterBindingNodeId {
     }
 
     private void resetChildCache(int childPos) {
-        if (cacheSize[childPos] < CHILDREN_CACHE_SIZE) {
-            cacheCurrentPos[childPos] = 0;
-            BindingNodeId binding = childrenCachedBindings[childPos][0];
-            extendMyBinding(binding.iterator(), binding);
-        } else {
-            // TODO reset BGP
-            children[childPos].reset();
-        }
-    }
-
-    private void extendMyBinding(Iterator<Var> bindingVars, BindingNodeId binding) {
-        while (bindingVars.hasNext()) {
-            Var v = bindingVars.next();
-            if (!myBinding.containsKey(v)) {
-                extendedBinding.put(v, binding.get(v));
-            }
-        }
+        children[childPos].reset();
+        fillChildCache(childPos);
+        extendBinding(childPos);
     }
 
     @Override
@@ -308,7 +290,8 @@ public class OptionalTreeNode implements LFIterBindingNodeId {
     @Override
     public boolean seekBinding(BindingNodeId previousBinding, int firstChangedVarPos) {
         if(atEndForever) return false;
-        return myPattern.seekBinding(previousBinding, firstChangedVarPos);
+        atEnd = !myPattern.seekBinding(previousBinding, firstChangedVarPos);
+        return !atEnd;
     }
     
     private boolean checkFilters(ExprList filters) {
